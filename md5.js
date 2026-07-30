@@ -14,7 +14,7 @@ app.use(cors());
 app.use(express.json());
 
 // Token và Admin ID
-const token = "8893583013:AAE8ZPADNYp_ikystH1mHe1bqi9o7NHoKgg";
+const token = "8893583013:AAHivdUboNsfZewloFxEeZ8wuSF-o2r3k8s";
 const adminId = "7338417401";  // THAY ID ADMIN VÀO ĐÂY
 
 const bot = new TelegramBot(token, { polling: true });
