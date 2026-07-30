@@ -1,7 +1,8 @@
 {
   "name": "md5-telegram-bot",
   "version": "1.0.0",
-  "description": "Telegram bot ph‚n tÌch MD5 v?i h? th?ng VIP v‡ thanh to·n qua QR Code",
+  "type": "commonjs",
+  "description": "Telegram bot ph√¢n t√≠ch MD5 v·ªõi h·ªá th·ªëng VIP v√† thanh to√°n qua QR Code",
   "main": "md5.js",
   "scripts": {
     "start": "node md5.js"
