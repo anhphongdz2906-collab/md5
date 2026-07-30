@@ -1,0 +1,28 @@
+{
+  "name": "md5-telegram-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot phân tích MD5 v?i h? th?ng VIP và thanh toán qua QR Code",
+  "main": "md5.js",
+  "scripts": {
+    "start": "node md5.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "node-telegram-bot-api": "^0.64.0",
+    "qrcode": "^1.5.3",
+    "cors": "^2.8.5"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "md5",
+    "analysis",
+    "vip",
+    "payment"
+  ],
+  "author": "TRINH ANH PHONG",
+  "license": "MIT"
+}
