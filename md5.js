@@ -1,5 +1,5 @@
 const express = require('express');
-const TelegramBot = require('node-telegram-bot-api').default;
+const TelegramBot = require('node-telegram-bot-api');
 const QRCode = require('qrcode');
 const cors = require('cors');
 
