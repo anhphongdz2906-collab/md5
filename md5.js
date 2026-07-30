@@ -1,5 +1,5 @@
 const express = require('express');
-const TelegramBot = require('node-telegram-bot-api');
+const TelegramBot = require('node-telegram-bot-api').default;
 const QRCode = require('qrcode');
 const cors = require('cors');
 
@@ -14,8 +14,8 @@ app.use(cors());
 app.use(express.json());
 
 // Token và Admin ID
-const token = "8893583013:AAErYV6bcvl6lYfCnOMnkYIKoFSPjqeg6lw";
-const adminId = "YOUR_ADMIN_ID_HERE";  // THAY ID ADMIN VÀO ĐÂY
+const token = "8893583013:AAHivdUboNsfZewloFxEeZ8wuSF-o2r3k8s";
+const adminId = "7338417401";  // THAY ID ADMIN VÀO ĐÂY
 
 const bot = new TelegramBot(token, { polling: true });
 
@@ -74,6 +74,11 @@ class PackageManager {
     submitBill(userId, transactionId, billInfo) {
         if (!this.pendingPayments[transactionId]) return false;
         const payment = this.pendingPayments[transactionId];
+        
+        // Kiểm tra trạng thái
+        if (payment.status !== 'pending') return false;
+        if (payment.userId !== userId) return false;
+        
         payment.billInfo = billInfo;
         payment.billSubmitted = true;
         payment.status = 'waiting_approval';
@@ -83,6 +88,10 @@ class PackageManager {
     approvePayment(transactionId) {
         if (!this.pendingPayments[transactionId]) return false;
         const payment = this.pendingPayments[transactionId];
+        
+        // Kiểm tra trạng thái
+        if (payment.status !== 'waiting_approval') return false;
+
         payment.status = 'approved';
 
         const userId = payment.userId;
@@ -95,12 +104,24 @@ class PackageManager {
         this.users[userId].activePackage = payment.packageId;
         this.users[userId].expiryDate = new Date(Date.now() + packageInfo.duration * 24 * 60 * 60 * 1000);
 
+        // XÓA KHỎI PENDING SAU KHI DUYỆT
+        delete this.pendingPayments[transactionId];
+
         return true;
     }
 
     rejectPayment(transactionId) {
         if (!this.pendingPayments[transactionId]) return false;
-        this.pendingPayments[transactionId].status = 'rejected';
+        const payment = this.pendingPayments[transactionId];
+        
+        // Kiểm tra trạng thái
+        if (payment.status !== 'waiting_approval') return false;
+        
+        payment.status = 'rejected';
+        
+        // XÓA KHỎI PENDING SAU KHI TỪ CHỐI
+        delete this.pendingPayments[transactionId];
+        
         return true;
     }
 
@@ -128,7 +149,7 @@ class PackageManager {
     }
 
     getPendingPayment(transactionId) {
-        return this.pendingPayments[transactionId];
+        return this.pendingPayments[transactionId] || null;
     }
 
     getAllPending() {
@@ -543,18 +564,19 @@ function formatVipMessage(userId, hasAccess) {
         const emoji = packageInfo ? packageInfo.emoji : '⭐';
 
         return `
-🔐 *BOT PHÂN TÍCH MD5/SHA256*
-━━━━━━━━━━━━━━━━━━━━━
+🔐 *MD5/SHA256 VIP AI PRO*
+━━━━━━━━━━━━━━━━━━━━━━━
 ✅ *VIP ĐANG HOẠT ĐỘNG*
 
 ${emoji} *Gói:* ${info.package}
 ⏰ *Hết hạn:* ${info.expiry}
 📝 *Số lần mua:* ${info.payments}
 
-━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━
 📌 *CÁCH SỬ DỤNG:*
 • Gửi MD5 (32 ký tự) → tự động phân tích
-━━━━━━━━━━━━━━━━━━━━━
+• Thuật toán 6 lớp AI phân tích
+━━━━━━━━━━━━━━━━━━━━━━━
 🕐 ${now}
         `.trim();
     } else {
@@ -675,6 +697,20 @@ bot.on('message', async (msg) => {
     // Kiểm tra chờ gửi bill
     if (global.awaitingBill && global.awaitingBill[userId]) {
         const txId = global.awaitingBill[userId];
+        
+        // Kiểm tra giao dịch còn tồn tại
+        const payment = packageManager.getPendingPayment(txId);
+        if (!payment || payment.status !== 'pending') {
+            await bot.sendMessage(chatId, `
+❌ *GIAO DỊCH KHÔNG HỢP LỆ HOẶC ĐÃ XỬ LÝ!*
+
+Vui lòng tạo giao dịch mới.
+Nhấn /start để bắt đầu.
+            `.trim(), { parse_mode: 'Markdown' });
+            delete global.awaitingBill[userId];
+            return;
+        }
+
         if (packageManager.submitBill(userId, txId, text)) {
             await bot.sendMessage(chatId, `
 ✅ *ĐÃ GỬI BILL THÀNH CÔNG!*
@@ -683,9 +719,7 @@ bot.on('message', async (msg) => {
 Admin sẽ xác nhận trong thời gian sớm nhất.
             `.trim(), { parse_mode: 'Markdown' });
 
-            const payment = packageManager.getPendingPayment(txId);
-            if (payment) {
-                const adminText = `
+            const adminText = `
 📋 *BILL MỚI CẦN DUYỆT*
 ━━━━━━━━━━━━━━━━━━━━━
 🆔 Mã GD: \`${txId}\`
@@ -694,22 +728,21 @@ Admin sẽ xác nhận trong thời gian sớm nhất.
 💰 Số tiền: ${payment.amount.toLocaleString()}đ
 📝 Nội dung: ${text}
 ━━━━━━━━━━━━━━━━━━━━━
-                `.trim();
+            `.trim();
 
-                const keyboard = {
-                    inline_keyboard: [
-                        [
-                            { text: '✅ DUYỆT', callback_data: `approve_${txId}` },
-                            { text: '❌ TỪ CHỐI', callback_data: `reject_${txId}` }
-                        ]
+            const keyboard = {
+                inline_keyboard: [
+                    [
+                        { text: '✅ DUYỆT', callback_data: `approve_${txId}` },
+                        { text: '❌ TỪ CHỐI', callback_data: `reject_${txId}` }
                     ]
-                };
+                ]
+            };
 
-                await bot.sendMessage(adminId, adminText, {
-                    parse_mode: 'Markdown',
-                    reply_markup: keyboard
-                });
-            }
+            await bot.sendMessage(adminId, adminText, {
+                parse_mode: 'Markdown',
+                reply_markup: keyboard
+            });
 
             delete global.awaitingBill[userId];
             return;
@@ -777,10 +810,24 @@ bot.on('callback_query', async (callbackQuery) => {
         }
 
         const [action, txId] = data.split('_');
+        
+        // Kiểm tra giao dịch tồn tại
+        const payment = packageManager.getPendingPayment(txId);
+        if (!payment) {
+            await bot.editMessageText(`
+❌ *GIAO DỊCH KHÔNG TỒN TẠI HOẶC ĐÃ XỬ LÝ!*
+━━━━━━━━━━━━━━━━━━━━━
+Mã GD: \`${txId}\`
+            `.trim(), {
+                chat_id: chatId,
+                message_id: callbackQuery.message.message_id,
+                parse_mode: 'Markdown'
+            });
+            return;
+        }
 
         if (action === 'approve') {
             if (packageManager.approvePayment(txId)) {
-                const payment = packageManager.getPendingPayment(txId);
                 await bot.editMessageText(`
 ✅ *ĐÃ DUYỆT GIAO DỊCH!*
 ━━━━━━━━━━━━━━━━━━━━━
@@ -796,18 +843,22 @@ bot.on('callback_query', async (callbackQuery) => {
                     parse_mode: 'Markdown'
                 });
 
+                const packageInfo = packageManager.getPackageInfo(payment.packageId);
+                const expiryDate = new Date(Date.now() + packageInfo.duration * 24 * 60 * 60 * 1000);
+
                 await bot.sendMessage(payment.userId, `
 🎉 *CHÚC MỪNG!*
 ━━━━━━━━━━━━━━━━━━━━━
 Gói VIP của bạn đã được kích hoạt!
 
-Bạn có thể sử dụng bot ngay bây giờ.
+${packageInfo.emoji} *${packageInfo.name}*
+⏰ Hết hạn: ${expiryDate.toLocaleString('vi-VN')}
+
 Nhấn /start để bắt đầu phân tích.
                 `.trim(), { parse_mode: 'Markdown' });
             }
         } else if (action === 'reject') {
             if (packageManager.rejectPayment(txId)) {
-                const payment = packageManager.getPendingPayment(txId);
                 await bot.editMessageText(`
 ❌ *ĐÃ TỪ CHỐI GIAO DỊCH!*
 ━━━━━━━━━━━━━━━━━━━━━
@@ -898,6 +949,18 @@ ${packageInfo.emoji} *Gói:* ${packageInfo.name}
     // Đã chuyển khoản
     if (data.startsWith('paid_')) {
         const txId = data.replace('paid_', '');
+        
+        // Kiểm tra giao dịch tồn tại
+        const payment = packageManager.getPendingPayment(txId);
+        if (!payment || payment.status !== 'pending') {
+            await bot.sendMessage(chatId, `
+❌ *GIAO DỊCH KHÔNG HỢP LỆ!*
+
+Vui lòng tạo giao dịch mới.
+Nhấn /start để bắt đầu.
+            `.trim(), { parse_mode: 'Markdown' });
+            return;
+        }
 
         if (!global.awaitingBill) global.awaitingBill = {};
         global.awaitingBill[userId] = txId;
@@ -999,6 +1062,14 @@ app.get('/api/stats', (req, res) => {
         users,
         pending,
         totalPayments: Object.values(packageManager.users).reduce((sum, u) => sum + u.payments.length, 0)
+    });
+});
+
+app.get('/health', (req, res) => {
+    res.status(200).json({
+        status: 'ok',
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString()
     });
 });
 
