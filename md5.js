@@ -14,7 +14,7 @@ app.use(cors());
 app.use(express.json());
 
 // Token và Admin ID
-const token = "8893583013:AAHivdUboNsfZewloFxEeZ8wuSF-o2r3k8s";
+const token = "8893583013:AAHFMGQpY1FmLXlEunJhLqATL9Qed8aXSA4";
 const adminId = "7338417401";  // THAY ID ADMIN VÀO ĐÂY
 
 const bot = new TelegramBot(token, { polling: true });
@@ -104,7 +104,7 @@ class PackageManager {
         this.users[userId].activePackage = payment.packageId;
         this.users[userId].expiryDate = new Date(Date.now() + packageInfo.duration * 24 * 60 * 60 * 1000);
 
-        // XÓA KHỎI PENDING SAU KHI DUYỆT
+        // ✅ XÓA KHỎI PENDING SAU KHI DUYỆT
         delete this.pendingPayments[transactionId];
 
         return true;
@@ -119,7 +119,7 @@ class PackageManager {
         
         payment.status = 'rejected';
         
-        // XÓA KHỎI PENDING SAU KHI TỪ CHỐI
+        // ✅ XÓA KHỎI PENDING SAU KHI TỪ CHỐI
         delete this.pendingPayments[transactionId];
         
         return true;
@@ -164,6 +164,9 @@ class PackageManager {
 }
 
 const packageManager = new PackageManager();
+
+// ✅ KHỞI TẠO GLOBAL AWAITING BILL
+global.awaitingBill = {};
 
 // ============================================
 // TẠO QR CODE
@@ -694,12 +697,11 @@ bot.on('message', async (msg) => {
     if (!text) return;
     if (text.startsWith('/')) return;
 
-    // Kiểm tra chờ gửi bill
+    // ✅ KIỂM TRA ĐANG CHỜ GỬI BILL
     if (global.awaitingBill && global.awaitingBill[userId]) {
         const txId = global.awaitingBill[userId];
-        
-        // Kiểm tra giao dịch còn tồn tại
         const payment = packageManager.getPendingPayment(txId);
+        
         if (!payment || payment.status !== 'pending') {
             await bot.sendMessage(chatId, `
 ❌ *GIAO DỊCH KHÔNG HỢP LỆ HOẶC ĐÃ XỬ LÝ!*
@@ -711,6 +713,7 @@ Nhấn /start để bắt đầu.
             return;
         }
 
+        // Lưu bill
         if (packageManager.submitBill(userId, txId, text)) {
             await bot.sendMessage(chatId, `
 ✅ *ĐÃ GỬI BILL THÀNH CÔNG!*
@@ -719,6 +722,7 @@ Nhấn /start để bắt đầu.
 Admin sẽ xác nhận trong thời gian sớm nhất.
             `.trim(), { parse_mode: 'Markdown' });
 
+            // Gửi cho admin
             const adminText = `
 📋 *BILL MỚI CẦN DUYỆT*
 ━━━━━━━━━━━━━━━━━━━━━
